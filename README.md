@@ -63,11 +63,17 @@ Add this line:
 
 3. Emails you only about **new** jobs not seen before
 
+4. Creates `open_all_jobs.html` - open this file to launch all jobs in browser tabs:
+   ```bash
+   open open_all_jobs.html
+   ```
+
 ## Files
 
 - `scraper.py` - Main scraper script
 - `config` - Your credentials (gitignored)
-- `seen_jobs.json` - Tracks previously seen jobs
+- `seen_jobs.json` - Tracks previously seen jobs with title, company, URL
+- `open_all_jobs.html` - Open this to launch all new jobs in browser tabs
 - `scraper.log` - Cron output log
 
 ## Customizing search queries

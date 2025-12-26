@@ -218,10 +218,27 @@ def send_email(config: dict, new_jobs: list[dict]):
     # Build email content
     subject = f"🎯 {len(new_jobs)} New Data Science Leadership Jobs Found"
 
-    # Create JavaScript to open all jobs in new tabs
+    # Create local HTML file that opens all jobs in tabs
     job_urls = [job.get('url', '') for job in new_jobs if job.get('url')]
-    js_urls = str(job_urls).replace("'", "\\'")
-    open_all_script = f"javascript:(function(){{var urls={js_urls};urls.forEach(function(u){{window.open(u,'_blank')}})}})()"
+    open_all_html = f"""<!DOCTYPE html>
+<html>
+<head><title>Open All Jobs</title></head>
+<body>
+<h2>Opening {len(job_urls)} jobs...</h2>
+<p>If tabs don't open automatically, click the links below:</p>
+<ul>
+{"".join(f'<li><a href="{url}" target="_blank">{url}</a></li>' for url in job_urls)}
+</ul>
+<script>
+var urls = {json.dumps(job_urls)};
+urls.forEach(function(u) {{ window.open(u, '_blank'); }});
+</script>
+</body>
+</html>"""
+
+    open_all_file = DATA_DIR / "open_all_jobs.html"
+    open_all_file.write_text(open_all_html)
+    open_all_link = f"file://{open_all_file.absolute()}"
 
     html_content = f"""
     <html>
@@ -229,7 +246,7 @@ def send_email(config: dict, new_jobs: list[dict]):
     <h2>New Job Postings Found</h2>
     <p>The following jobs were posted in the last 24 hours:</p>
     <p style="margin: 15px 0;">
-        <a href="{open_all_script}" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+        <a href="{open_all_link}" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
             Open All {len(new_jobs)} Jobs in New Tabs
         </a>
     </p>
