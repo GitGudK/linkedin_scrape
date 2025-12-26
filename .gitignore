@@ -1,0 +1,10 @@
+.env
+config
+__pycache__/
+*.pyc
+.venv/
+venv/
+seen_jobs.json
+scraper.log
+/resumes/
+.DS_Store
