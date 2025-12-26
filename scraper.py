@@ -15,18 +15,24 @@ from playwright.sync_api import sync_playwright, Page
 DATA_DIR = Path(__file__).parent
 SEEN_JOBS_FILE = DATA_DIR / "seen_jobs.json"
 CONFIG_FILE = DATA_DIR / "config"
+FILTERS_FILE = DATA_DIR / "filters.json"
 
-# Search configuration
-SEARCH_QUERIES = [
-    "data science director",
-    "data science VP",
-    "VP data science",
-    "director of data science",
-    "head of data science",
-    "AI director",
-    "ML director",
-    "director machine learning",
-]
+# Default filters (used if filters.json doesn't exist)
+DEFAULT_FILTERS = {
+    "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
+    "exclude_keywords": ["contractor", "contract", "freelance", "consultant", "hourly", "/hr", "per hour", "$/hour", "c2c", "corp to corp", "1099", "w2 contract", "temp", "temporary"],
+    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"]
+}
+
+
+def load_filters() -> dict:
+    """Load filters from filters.json."""
+    if FILTERS_FILE.exists():
+        try:
+            return json.loads(FILTERS_FILE.read_text())
+        except json.JSONDecodeError:
+            pass
+    return DEFAULT_FILTERS
 
 
 def load_config() -> dict:
@@ -222,41 +228,27 @@ def extract_job(page: Page, card) -> dict | None:
         return None
 
 
-def is_location_match(location: str, description: str) -> bool:
-    """Check if job is remote or based in Atlanta."""
+def is_location_match(location: str, description: str, location_keywords: list) -> bool:
+    """Check if job matches any location keywords."""
     location_lower = location.lower()
     description_lower = description.lower()
 
-    # Check for remote
-    remote_keywords = ["remote", "work from home", "wfh", "anywhere"]
-    for keyword in remote_keywords:
-        if keyword in location_lower or keyword in description_lower:
-            return True
-
-    # Check for Atlanta
-    atlanta_keywords = ["atlanta", "atl", ", ga", "georgia"]
-    for keyword in atlanta_keywords:
-        if keyword in location_lower:
+    for keyword in location_keywords:
+        keyword_lower = keyword.lower()
+        if keyword_lower in location_lower or keyword_lower in description_lower:
             return True
 
     return False
 
 
-def is_full_time_employee(title: str, description: str) -> bool:
+def is_full_time_employee(title: str, description: str, exclude_keywords: list) -> bool:
     """Check if job is a full-time employee position (not hourly/contractor)."""
     title_lower = title.lower()
     description_lower = description.lower()
 
-    # Exclude contractor/hourly keywords
-    exclude_keywords = [
-        "contractor", "contract", "freelance", "consultant",
-        "hourly", "/hr", "per hour", "$/hour", "$ / hour",
-        "c2c", "corp to corp", "corp-to-corp",
-        "1099", "w2 contract", "temp", "temporary",
-    ]
-
     for keyword in exclude_keywords:
-        if keyword in title_lower or keyword in description_lower:
+        keyword_lower = keyword.lower()
+        if keyword_lower in title_lower or keyword_lower in description_lower:
             return False
 
     return True
@@ -389,6 +381,9 @@ def run_scraper():
     seen_job_ids, seen_jobs_dict = load_seen_jobs()
     print(f"Loaded {len(seen_job_ids)} previously seen job IDs")
 
+    # Load filters
+    filters = load_filters()
+
     all_jobs = []
 
     with sync_playwright() as playwright:
@@ -409,8 +404,10 @@ def run_scraper():
             return
         print("✓ Logged in successfully\n")
 
-        # Search for each query
-        for query in SEARCH_QUERIES:
+        # Get search queries from filters
+        search_queries = filters.get("search_queries", DEFAULT_FILTERS["search_queries"])
+
+        for query in search_queries:
             print(f"Searching: {query}")
             jobs = search_jobs(page, query)
             print(f"  Found {len(jobs)} jobs")
@@ -428,19 +425,23 @@ def run_scraper():
 
     print(f"\nTotal unique jobs found: {len(unique_jobs)}")
 
-    # Filter to remote or Atlanta jobs only
+    # Get filter keywords
+    location_keywords = filters.get("location_keywords", DEFAULT_FILTERS["location_keywords"])
+    exclude_keywords = filters.get("exclude_keywords", DEFAULT_FILTERS["exclude_keywords"])
+
+    # Filter by location keywords
     location_filtered = {
         job_id: job for job_id, job in unique_jobs.items()
-        if is_location_match(job.get("location", ""), job.get("description", ""))
+        if is_location_match(job.get("location", ""), job.get("description", ""), location_keywords)
     }
-    print(f"Jobs matching location (remote/Atlanta): {len(location_filtered)}")
+    print(f"Jobs matching location filter: {len(location_filtered)}")
 
-    # Filter out contractor/hourly positions
+    # Filter out excluded keywords (contractor/hourly)
     fte_filtered = {
         job_id: job for job_id, job in location_filtered.items()
-        if is_full_time_employee(job.get("title", ""), job.get("description", ""))
+        if is_full_time_employee(job.get("title", ""), job.get("description", ""), exclude_keywords)
     }
-    print(f"Jobs that are full-time (not contractor/hourly): {len(fte_filtered)}")
+    print(f"Jobs after exclusion filter: {len(fte_filtered)}")
 
     # Filter to new jobs only
     new_jobs = [job for job_id, job in fte_filtered.items() if job_id not in seen_job_ids]

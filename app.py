@@ -10,8 +10,15 @@ import streamlit as st
 
 DATA_DIR = Path(__file__).parent
 SEEN_JOBS_FILE = DATA_DIR / "seen_jobs.json"
+FILTERS_FILE = DATA_DIR / "filters.json"
 PYTHON_PATH = Path.home() / ".pyenv/versions/3.11.5/envs/li/bin/python"
 SCRAPER_PATH = DATA_DIR / "scraper.py"
+
+DEFAULT_FILTERS = {
+    "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
+    "exclude_keywords": ["contractor", "contract", "freelance", "consultant", "hourly", "/hr", "per hour", "$/hour", "c2c", "corp to corp", "1099", "w2 contract", "temp", "temporary"],
+    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"]
+}
 
 
 def load_jobs() -> dict:
@@ -33,6 +40,22 @@ def save_jobs(jobs: dict):
     }, indent=2))
 
 
+def load_filters() -> dict:
+    """Load filters from filters.json."""
+    if not FILTERS_FILE.exists():
+        save_filters(DEFAULT_FILTERS)
+        return DEFAULT_FILTERS
+    try:
+        return json.loads(FILTERS_FILE.read_text())
+    except json.JSONDecodeError:
+        return DEFAULT_FILTERS
+
+
+def save_filters(filters: dict):
+    """Save filters to filters.json."""
+    FILTERS_FILE.write_text(json.dumps(filters, indent=2))
+
+
 def run_scraper():
     """Run the scraper script and return output."""
     result = subprocess.run(
@@ -52,6 +75,9 @@ st.set_page_config(
 )
 
 st.title("💼 LinkedIn Job Scraper")
+
+# Load current filters
+filters = load_filters()
 
 # Sidebar
 with st.sidebar:
@@ -85,17 +111,48 @@ with st.sidebar:
 
     st.divider()
 
-    st.header("Filters Active")
-    st.markdown("""
-**Location:** Remote or Atlanta
-- remote, work from home, wfh, anywhere
-- atlanta, atl, ga, georgia
+    # Editable Filters
+    st.header("⚙️ Filters")
 
-**Employment Type:** Full-time only
-- Excludes: contractor, contract, freelance
-- Excludes: hourly, /hr, per hour
-- Excludes: c2c, 1099, temp
-    """)
+    with st.expander("📍 Location Keywords", expanded=False):
+        location_text = st.text_area(
+            "Include jobs matching these (one per line):",
+            value="\n".join(filters.get("location_keywords", [])),
+            height=150,
+            key="location_keywords"
+        )
+        new_location = [k.strip() for k in location_text.split("\n") if k.strip()]
+
+    with st.expander("🚫 Exclude Keywords", expanded=False):
+        exclude_text = st.text_area(
+            "Exclude jobs containing these (one per line):",
+            value="\n".join(filters.get("exclude_keywords", [])),
+            height=150,
+            key="exclude_keywords"
+        )
+        new_exclude = [k.strip() for k in exclude_text.split("\n") if k.strip()]
+
+    with st.expander("🔍 Search Queries", expanded=False):
+        queries_text = st.text_area(
+            "LinkedIn search queries (one per line):",
+            value="\n".join(filters.get("search_queries", [])),
+            height=150,
+            key="search_queries"
+        )
+        new_queries = [k.strip() for k in queries_text.split("\n") if k.strip()]
+
+    # Check if filters changed
+    new_filters = {
+        "location_keywords": new_location,
+        "exclude_keywords": new_exclude,
+        "search_queries": new_queries
+    }
+
+    if new_filters != filters:
+        if st.button("💾 Save Filters", use_container_width=True):
+            save_filters(new_filters)
+            st.success("Filters saved!")
+            st.rerun()
 
     st.divider()
     st.header("Quick Actions")
