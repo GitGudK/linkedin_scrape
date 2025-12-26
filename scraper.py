@@ -3,6 +3,8 @@
 import json
 import smtplib
 import hashlib
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from email.mime.text import MIMEText
@@ -61,9 +63,22 @@ def save_seen_jobs(jobs_dict: dict):
     }, indent=2))
 
 
+def extract_job_view_id(url: str) -> str:
+    """Extract the job view ID from a LinkedIn URL, stripping tracking params."""
+    # LinkedIn URLs look like: https://www.linkedin.com/jobs/view/4329321531/?eBP=...
+    # We just want the job ID (4329321531)
+    if "/jobs/view/" in url:
+        parts = url.split("/jobs/view/")[1]
+        job_view_id = parts.split("/")[0].split("?")[0]
+        return job_view_id
+    return url
+
+
 def generate_job_id(job: dict) -> str:
-    """Generate a unique ID for a job based on title, company, and URL."""
-    unique_str = f"{job.get('title', '')}-{job.get('company', '')}-{job.get('url', '')}"
+    """Generate a unique ID for a job based on title, company, and job view ID."""
+    url = job.get('url', '')
+    job_view_id = extract_job_view_id(url)
+    unique_str = f"{job.get('title', '')}-{job.get('company', '')}-{job_view_id}"
     return hashlib.md5(unique_str.encode()).hexdigest()[:12]
 
 
@@ -187,6 +202,10 @@ def extract_job(page: Page, card) -> dict | None:
                 job_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
         if job_url and not job_url.startswith("http"):
             job_url = f"https://www.linkedin.com{job_url}"
+        # Clean URL - strip tracking parameters
+        if job_url and "/jobs/view/" in job_url:
+            job_view_id = extract_job_view_id(job_url)
+            job_url = f"https://www.linkedin.com/jobs/view/{job_view_id}/"
 
         if not title:
             return None
@@ -201,6 +220,46 @@ def extract_job(page: Page, card) -> dict | None:
         }
     except Exception as e:
         return None
+
+
+def is_location_match(location: str, description: str) -> bool:
+    """Check if job is remote or based in Atlanta."""
+    location_lower = location.lower()
+    description_lower = description.lower()
+
+    # Check for remote
+    remote_keywords = ["remote", "work from home", "wfh", "anywhere"]
+    for keyword in remote_keywords:
+        if keyword in location_lower or keyword in description_lower:
+            return True
+
+    # Check for Atlanta
+    atlanta_keywords = ["atlanta", "atl", ", ga", "georgia"]
+    for keyword in atlanta_keywords:
+        if keyword in location_lower:
+            return True
+
+    return False
+
+
+def is_full_time_employee(title: str, description: str) -> bool:
+    """Check if job is a full-time employee position (not hourly/contractor)."""
+    title_lower = title.lower()
+    description_lower = description.lower()
+
+    # Exclude contractor/hourly keywords
+    exclude_keywords = [
+        "contractor", "contract", "freelance", "consultant",
+        "hourly", "/hr", "per hour", "$/hour", "$ / hour",
+        "c2c", "corp to corp", "corp-to-corp",
+        "1099", "w2 contract", "temp", "temporary",
+    ]
+
+    for keyword in exclude_keywords:
+        if keyword in title_lower or keyword in description_lower:
+            return False
+
+    return True
 
 
 def send_email(config: dict, new_jobs: list[dict]):
@@ -220,35 +279,51 @@ def send_email(config: dict, new_jobs: list[dict]):
 
     # Create local HTML file that opens all jobs in tabs
     job_urls = [job.get('url', '') for job in new_jobs if job.get('url')]
+    job_items = []
+    for job in new_jobs:
+        url = job.get('url', '')
+        title = job.get('title', 'Unknown')
+        company = job.get('company', 'Unknown')
+        if url:
+            job_items.append(f'<li style="margin: 10px 0;"><a href="{url}" target="_blank" style="font-size: 16px;">{title}</a> - {company}</li>')
+
     open_all_html = f"""<!DOCTYPE html>
 <html>
-<head><title>Open All Jobs</title></head>
+<head>
+    <title>Open All Jobs</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }}
+        .open-all {{ background: #0066cc; color: white; padding: 15px 30px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer; margin: 20px 0; }}
+        .open-all:hover {{ background: #0052a3; }}
+        ul {{ list-style: none; padding: 0; }}
+    </style>
+</head>
 <body>
-<h2>Opening {len(job_urls)} jobs...</h2>
-<p>If tabs don't open automatically, click the links below:</p>
+<h1>{len(job_urls)} New Jobs Found</h1>
+<button class="open-all" onclick="openAll()">Click Here to Open All {len(job_urls)} Jobs in New Tabs</button>
+<p style="color: #666;">If pop-ups are blocked, allow pop-ups for this page and click again, or click each link below:</p>
 <ul>
-{"".join(f'<li><a href="{url}" target="_blank">{url}</a></li>' for url in job_urls)}
+{"".join(job_items)}
 </ul>
 <script>
 var urls = {json.dumps(job_urls)};
-urls.forEach(function(u) {{ window.open(u, '_blank'); }});
+function openAll() {{
+    urls.forEach(function(u) {{ window.open(u, '_blank'); }});
+}}
 </script>
 </body>
 </html>"""
 
     open_all_file = DATA_DIR / "open_all_jobs.html"
     open_all_file.write_text(open_all_html)
-    open_all_link = f"file://{open_all_file.absolute()}"
 
     html_content = f"""
     <html>
     <body style="font-family: Arial, sans-serif; max-width: 600px;">
     <h2>New Job Postings Found</h2>
     <p>The following jobs were posted in the last 24 hours:</p>
-    <p style="margin: 15px 0;">
-        <a href="{open_all_link}" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-            Open All {len(new_jobs)} Jobs in New Tabs
-        </a>
+    <p style="margin: 15px 0; padding: 10px; background: #f0f0f0; border-radius: 5px;">
+        <strong>Open all jobs at once:</strong> Run <code>open ~/Code/linkedin_scrape/open_all_jobs.html</code> in Terminal
     </p>
     """
 
@@ -353,19 +428,34 @@ def run_scraper():
 
     print(f"\nTotal unique jobs found: {len(unique_jobs)}")
 
+    # Filter to remote or Atlanta jobs only
+    location_filtered = {
+        job_id: job for job_id, job in unique_jobs.items()
+        if is_location_match(job.get("location", ""), job.get("description", ""))
+    }
+    print(f"Jobs matching location (remote/Atlanta): {len(location_filtered)}")
+
+    # Filter out contractor/hourly positions
+    fte_filtered = {
+        job_id: job for job_id, job in location_filtered.items()
+        if is_full_time_employee(job.get("title", ""), job.get("description", ""))
+    }
+    print(f"Jobs that are full-time (not contractor/hourly): {len(fte_filtered)}")
+
     # Filter to new jobs only
-    new_jobs = [job for job_id, job in unique_jobs.items() if job_id not in seen_job_ids]
+    new_jobs = [job for job_id, job in fte_filtered.items() if job_id not in seen_job_ids]
     print(f"New jobs (not seen before): {len(new_jobs)}")
 
     if new_jobs:
         # Send email notification
         send_email(config, new_jobs)
 
-        # Update seen jobs with full details
-        for job_id, job in unique_jobs.items():
+        # Update seen jobs with full details (only filtered jobs)
+        for job_id, job in fte_filtered.items():
             seen_jobs_dict[job_id] = {
                 "title": job.get("title"),
                 "company": job.get("company"),
+                "location": job.get("location"),
                 "url": job.get("url"),
                 "scraped_at": job.get("scraped_at"),
             }
@@ -376,6 +466,13 @@ def run_scraper():
         for job in new_jobs:
             print(f"  • {job['title']} at {job['company']}")
             print(f"    {job['url']}\n")
+
+        # Open all jobs in browser if running interactively (not cron)
+        if sys.stdout.isatty():
+            open_all_file = DATA_DIR / "open_all_jobs.html"
+            if open_all_file.exists():
+                print("Opening all jobs in browser...")
+                subprocess.run(["open", str(open_all_file)])
     else:
         print("\nNo new jobs found.")
 

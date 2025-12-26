@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Open All Jobs</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        .open-all { background: #0066cc; color: white; padding: 15px 30px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer; margin: 20px 0; }
+        .open-all:hover { background: #0052a3; }
+        ul { list-style: none; padding: 0; }
+    </style>
+</head>
+<body>
+<h1>3 New Jobs Found</h1>
+<button class="open-all" onclick="openAll()">Click Here to Open All 3 Jobs in New Tabs</button>
+<p style="color: #666;">If pop-ups are blocked, allow pop-ups for this page and click again, or click each link below:</p>
+<ul>
+<li style="margin: 10px 0;"><a href="https://www.linkedin.com/jobs/view/4322252047/" target="_blank" style="font-size: 16px;">Director, Platform Strategy and Governance
+Director, Platform Strategy and Governance with verification</a> - Equifax</li><li style="margin: 10px 0;"><a href="https://www.linkedin.com/jobs/view/4329321531/" target="_blank" style="font-size: 16px;">Director of Business Intelligence
+Director of Business Intelligence</a> - RemoteHunter</li><li style="margin: 10px 0;"><a href="https://www.linkedin.com/jobs/view/4329258975/" target="_blank" style="font-size: 16px;">Vice President, AI Technical Success
+Vice President, AI Technical Success</a> - RemoteHunter</li>
+</ul>
+<script>
+var urls = ["https://www.linkedin.com/jobs/view/4322252047/", "https://www.linkedin.com/jobs/view/4329321531/", "https://www.linkedin.com/jobs/view/4329258975/"];
+function openAll() {
+    urls.forEach(function(u) { window.open(u, '_blank'); });
+}
+</script>
+</body>
+</html>
