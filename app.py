@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Streamlit frontend for LinkedIn Job Scraper."""
+
+import json
+import subprocess
+from datetime import datetime
+from pathlib import Path
+
+import streamlit as st
+
+DATA_DIR = Path(__file__).parent
+SEEN_JOBS_FILE = DATA_DIR / "seen_jobs.json"
+PYTHON_PATH = Path.home() / ".pyenv/versions/3.11.5/envs/li/bin/python"
+SCRAPER_PATH = DATA_DIR / "scraper.py"
+
+
+def load_jobs() -> dict:
+    """Load jobs from seen_jobs.json."""
+    if not SEEN_JOBS_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SEEN_JOBS_FILE.read_text())
+        return data.get("jobs", {})
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def save_jobs(jobs: dict):
+    """Save jobs to seen_jobs.json."""
+    SEEN_JOBS_FILE.write_text(json.dumps({
+        "jobs": jobs,
+        "last_updated": datetime.now().isoformat()
+    }, indent=2))
+
+
+def run_scraper():
+    """Run the scraper script and return output."""
+    result = subprocess.run(
+        [str(PYTHON_PATH), str(SCRAPER_PATH)],
+        capture_output=True,
+        text=True,
+        timeout=300
+    )
+    return result.stdout + result.stderr
+
+
+# Page config
+st.set_page_config(
+    page_title="LinkedIn Job Scraper",
+    page_icon="💼",
+    layout="wide"
+)
+
+st.title("💼 LinkedIn Job Scraper")
+
+# Sidebar
+with st.sidebar:
+    st.header("🔄 Run Scraper")
+
+    if st.button("🚀 Run Scraper Now", type="primary", use_container_width=True):
+        with st.spinner("Running scraper..."):
+            try:
+                output = run_scraper()
+                st.success("Scraper completed!")
+                st.session_state["scraper_output"] = output
+            except subprocess.TimeoutExpired:
+                st.error("Scraper timed out after 5 minutes.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    # Show last run info
+    if SEEN_JOBS_FILE.exists():
+        try:
+            data = json.loads(SEEN_JOBS_FILE.read_text())
+            last_updated = data.get("last_updated", "Unknown")
+            if last_updated != "Unknown":
+                try:
+                    dt = datetime.fromisoformat(last_updated)
+                    last_updated = dt.strftime("%b %d %I:%M %p")
+                except:
+                    pass
+            st.caption(f"Last run: {last_updated}")
+        except:
+            pass
+
+    st.divider()
+
+    st.header("Filters Active")
+    st.markdown("""
+**Location:** Remote or Atlanta
+- remote, work from home, wfh, anywhere
+- atlanta, atl, ga, georgia
+
+**Employment Type:** Full-time only
+- Excludes: contractor, contract, freelance
+- Excludes: hourly, /hr, per hour
+- Excludes: c2c, 1099, temp
+    """)
+
+    st.divider()
+    st.header("Quick Actions")
+
+    sidebar_jobs = load_jobs()
+    not_applied = [j for j in sidebar_jobs.values() if not j.get("applied", False)]
+
+    if not_applied:
+        st.write(f"**{len(not_applied)}** jobs to review")
+
+        if st.button("🔗 Open All Unapplied Jobs", use_container_width=True):
+            urls = [j.get("url") for j in not_applied if j.get("url")]
+            html_content = f"""<!DOCTYPE html>
+<html>
+<head><title>Open Jobs</title></head>
+<body>
+<h2>Click the button to open {len(urls)} jobs in new tabs</h2>
+<button onclick="openAll()" style="padding: 20px 40px; font-size: 18px; cursor: pointer;">
+    Open All {len(urls)} Jobs
+</button>
+<script>
+function openAll() {{
+    const urls = {json.dumps(urls)};
+    urls.forEach(url => window.open(url, '_blank'));
+}}
+</script>
+</body>
+</html>"""
+            open_file = DATA_DIR / "open_all_jobs.html"
+            open_file.write_text(html_content)
+            st.success("Created!")
+            st.code(f"open {open_file}", language="bash")
+    else:
+        st.success("All jobs reviewed!")
+
+    st.divider()
+
+    if st.button("🗑️ Clear All Applied", use_container_width=True):
+        sidebar_jobs = load_jobs()
+        for job_id in sidebar_jobs:
+            sidebar_jobs[job_id]["applied"] = False
+        save_jobs(sidebar_jobs)
+        st.rerun()
+
+# Main content: Jobs list with checkboxes
+st.header("Scraped Jobs")
+
+jobs = load_jobs()
+
+if not jobs:
+    st.info("No jobs found. Run the scraper to find jobs.")
+else:
+    # Filter options
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        show_filter = st.selectbox(
+            "Show",
+            ["Not Applied", "Applied", "All"],
+            index=0
+        )
+    with col2:
+        st.metric("Total Jobs", len(jobs))
+    with col3:
+        applied_count = sum(1 for j in jobs.values() if j.get("applied", False))
+        st.metric("Applied", f"{applied_count} / {len(jobs)}")
+
+    st.divider()
+
+    # Track changes
+    changes_made = False
+
+    # Sort jobs by scraped_at (newest first)
+    sorted_jobs = sorted(
+        jobs.items(),
+        key=lambda x: x[1].get("scraped_at", ""),
+        reverse=True
+    )
+
+    # Filter jobs
+    filtered_jobs = []
+    for job_id, job in sorted_jobs:
+        applied = job.get("applied", False)
+        if show_filter == "Not Applied" and applied:
+            continue
+        elif show_filter == "Applied" and not applied:
+            continue
+        filtered_jobs.append((job_id, job))
+
+    if not filtered_jobs:
+        st.info(f"No jobs matching filter: {show_filter}")
+
+    # Display jobs
+    for job_id, job in filtered_jobs:
+        title = job.get("title", "Unknown")
+        company = job.get("company", "Unknown")
+        location = job.get("location", "Unknown")
+        url = job.get("url", "")
+        scraped_at = job.get("scraped_at", "")
+        applied = job.get("applied", False)
+
+        # Format date
+        if scraped_at:
+            try:
+                dt = datetime.fromisoformat(scraped_at)
+                date_str = dt.strftime("%b %d, %Y %I:%M %p")
+            except:
+                date_str = scraped_at
+        else:
+            date_str = "Unknown"
+
+        with st.container():
+            col1, col2 = st.columns([0.05, 0.95])
+
+            with col1:
+                new_applied = st.checkbox(
+                    "Applied",
+                    value=applied,
+                    key=f"applied_{job_id}",
+                    label_visibility="collapsed"
+                )
+                if new_applied != applied:
+                    jobs[job_id]["applied"] = new_applied
+                    changes_made = True
+
+            with col2:
+                st.markdown(f"**[{title}]({url})** at **{company}**")
+                st.caption(f"📍 {location} | 🕐 {date_str}")
+
+            st.divider()
+
+    # Save changes if any
+    if changes_made:
+        save_jobs(jobs)
+        st.rerun()
