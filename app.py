@@ -17,7 +17,8 @@ SCRAPER_PATH = DATA_DIR / "scraper.py"
 DEFAULT_FILTERS = {
     "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
     "exclude_keywords": ["contractor", "contract", "freelance", "consultant", "hourly", "/hr", "per hour", "$/hour", "c2c", "corp to corp", "1099", "w2 contract", "temp", "temporary"],
-    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"]
+    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"],
+    "time_filter": "Past week"
 }
 
 
@@ -141,11 +142,23 @@ with st.sidebar:
         )
         new_queries = [k.strip() for k in queries_text.split("\n") if k.strip()]
 
+    # Time filter for LinkedIn search
+    time_options = ["Any time", "Past month", "Past week", "Past 24 hours"]
+    current_time = filters.get("time_filter", "Past week")
+    if current_time not in time_options:
+        current_time = "Past week"
+    new_time_filter = st.selectbox(
+        "🕐 Posted within",
+        time_options,
+        index=time_options.index(current_time)
+    )
+
     # Check if filters changed
     new_filters = {
         "location_keywords": new_location,
         "exclude_keywords": new_exclude,
-        "search_queries": new_queries
+        "search_queries": new_queries,
+        "time_filter": new_time_filter
     }
 
     if new_filters != filters:
@@ -214,7 +227,7 @@ else:
             index=0
         )
     with col2:
-        st.metric("Total Jobs", len(jobs))
+        st.metric("Total", len(jobs))
     with col3:
         applied_count = sum(1 for j in jobs.values() if j.get("applied", False))
         st.metric("Applied", applied_count)
@@ -239,12 +252,15 @@ else:
     for job_id, job in sorted_jobs:
         applied = job.get("applied", False)
         ignored = job.get("ignored", False)
+
+        # Status filter
         if show_filter == "Not Applied" and (applied or ignored):
             continue
         elif show_filter == "Applied" and not applied:
             continue
         elif show_filter == "Ignored" and not ignored:
             continue
+
         filtered_jobs.append((job_id, job))
 
     if not filtered_jobs:

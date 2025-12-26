@@ -21,7 +21,8 @@ FILTERS_FILE = DATA_DIR / "filters.json"
 DEFAULT_FILTERS = {
     "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
     "exclude_keywords": ["contractor", "contract", "freelance", "consultant", "hourly", "/hr", "per hour", "$/hour", "c2c", "corp to corp", "1099", "w2 contract", "temp", "temporary"],
-    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"]
+    "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"],
+    "time_filter": "Past week"
 }
 
 
@@ -116,12 +117,23 @@ def auto_login(page: Page, email: str, password: str) -> bool:
         return False
 
 
-def search_jobs(page: Page, query: str) -> list[dict]:
+def search_jobs(page: Page, query: str, time_filter: str = "Past week") -> list[dict]:
     """Search for jobs with the given query."""
     jobs = []
 
-    # Build search URL (last 24 hours filter)
-    search_url = f"https://www.linkedin.com/jobs/search/?keywords={query.replace(' ', '%20')}&f_TPR=r86400"
+    # Time filter mapping to LinkedIn's f_TPR parameter
+    # r86400 = past 24 hours, r604800 = past week, r2592000 = past month
+    time_param = ""
+    if time_filter == "Past 24 hours":
+        time_param = "&f_TPR=r86400"
+    elif time_filter == "Past week":
+        time_param = "&f_TPR=r604800"
+    elif time_filter == "Past month":
+        time_param = "&f_TPR=r2592000"
+    # "Any time" = no param
+
+    # Build search URL
+    search_url = f"https://www.linkedin.com/jobs/search/?keywords={query.replace(' ', '%20')}{time_param}"
 
     try:
         page.goto(search_url, timeout=60000)
@@ -404,12 +416,14 @@ def run_scraper():
             return
         print("✓ Logged in successfully\n")
 
-        # Get search queries from filters
+        # Get search queries and time filter from filters
         search_queries = filters.get("search_queries", DEFAULT_FILTERS["search_queries"])
+        time_filter = filters.get("time_filter", "Past week")
+        print(f"Time filter: {time_filter}\n")
 
         for query in search_queries:
             print(f"Searching: {query}")
-            jobs = search_jobs(page, query)
+            jobs = search_jobs(page, query, time_filter)
             print(f"  Found {len(jobs)} jobs")
             all_jobs.extend(jobs)
 

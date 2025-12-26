@@ -1,5 +1,39 @@
 {
-  "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
-  "exclude_keywords": ["contractor", "contract", "freelance", "consultant", "hourly", "/hr", "per hour", "$/hour", "c2c", "corp to corp", "1099", "w2 contract", "temp", "temporary"],
-  "search_queries": ["data science director", "data science VP", "VP data science", "director of data science", "head of data science", "AI director", "ML director", "director machine learning"]
+  "location_keywords": [
+    "remote",
+    "work from home",
+    "wfh",
+    "anywhere",
+    "atlanta",
+    "atl",
+    ", ga",
+    "georgia"
+  ],
+  "exclude_keywords": [
+    "contractor",
+    "contract",
+    "freelance",
+    "consultant",
+    "hourly",
+    "/hr",
+    "per hour",
+    "$/hour",
+    "c2c",
+    "corp to corp",
+    "1099",
+    "w2 contract",
+    "temp",
+    "temporary"
+  ],
+  "search_queries": [
+    "data science director",
+    "data science VP",
+    "VP data science",
+    "director of data science",
+    "head of data science",
+    "AI director",
+    "ML director",
+    "director machine learning"
+  ],
+  "time_filter": "Past 24 hours"
 }
