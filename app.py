@@ -250,6 +250,11 @@ else:
     if not filtered_jobs:
         st.info(f"No jobs matching filter: {show_filter}")
 
+    # Column headers
+    header_col1, header_col2 = st.columns([0.12, 0.88])
+    with header_col1:
+        st.caption("Applied | Skip")
+
     # Display jobs
     for job_id, job in filtered_jobs:
         title = job.get("title", "Unknown")
@@ -271,36 +276,42 @@ else:
             date_str = "Unknown"
 
         with st.container():
-            col1, col2, col3 = st.columns([0.05, 0.05, 0.90])
+            col1, col2 = st.columns([0.12, 0.88])
 
             with col1:
-                new_applied = st.checkbox(
-                    "✓",
-                    value=applied,
-                    key=f"applied_{job_id}",
-                    help="Mark as applied"
-                )
-                if new_applied != applied:
-                    jobs[job_id]["applied"] = new_applied
-                    if new_applied:
-                        jobs[job_id]["ignored"] = False  # Unignore if applied
-                    changes_made = True
+                subcol1, subcol2 = st.columns(2)
+                with subcol1:
+                    new_applied = st.checkbox(
+                        "✓",
+                        value=applied,
+                        key=f"applied_{job_id}",
+                        label_visibility="collapsed"
+                    )
+                    if new_applied != applied:
+                        jobs[job_id]["applied"] = new_applied
+                        if new_applied:
+                            jobs[job_id]["ignored"] = False
+                        changes_made = True
+                with subcol2:
+                    new_ignored = st.checkbox(
+                        "✗",
+                        value=ignored,
+                        key=f"ignored_{job_id}",
+                        label_visibility="collapsed"
+                    )
+                    if new_ignored != ignored:
+                        jobs[job_id]["ignored"] = new_ignored
+                        if new_ignored:
+                            jobs[job_id]["applied"] = False
+                        changes_made = True
 
             with col2:
-                new_ignored = st.checkbox(
-                    "✗",
-                    value=ignored,
-                    key=f"ignored_{job_id}",
-                    help="Ignore this job"
-                )
-                if new_ignored != ignored:
-                    jobs[job_id]["ignored"] = new_ignored
-                    if new_ignored:
-                        jobs[job_id]["applied"] = False  # Unapply if ignored
-                    changes_made = True
-
-            with col3:
-                st.markdown(f"**[{title}]({url})** at **{company}**")
+                status = ""
+                if applied:
+                    status = " ✅"
+                elif ignored:
+                    status = " ❌"
+                st.markdown(f"**[{title}]({url})** at **{company}**{status}")
                 st.caption(f"📍 {location} | 🕐 {date_str}")
 
             st.divider()
