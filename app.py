@@ -158,7 +158,7 @@ with st.sidebar:
     st.header("Quick Actions")
 
     sidebar_jobs = load_jobs()
-    not_applied = [j for j in sidebar_jobs.values() if not j.get("applied", False)]
+    not_applied = [j for j in sidebar_jobs.values() if not j.get("applied", False) and not j.get("ignored", False)]
 
     if not_applied:
         st.write(f"**{len(not_applied)}** jobs to review")
@@ -206,18 +206,21 @@ if not jobs:
     st.info("No jobs found. Run the scraper to find jobs.")
 else:
     # Filter options
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         show_filter = st.selectbox(
             "Show",
-            ["Not Applied", "Applied", "All"],
+            ["Not Applied", "Applied", "Ignored", "All"],
             index=0
         )
     with col2:
         st.metric("Total Jobs", len(jobs))
     with col3:
         applied_count = sum(1 for j in jobs.values() if j.get("applied", False))
-        st.metric("Applied", f"{applied_count} / {len(jobs)}")
+        st.metric("Applied", applied_count)
+    with col4:
+        ignored_count = sum(1 for j in jobs.values() if j.get("ignored", False))
+        st.metric("Ignored", ignored_count)
 
     st.divider()
 
@@ -235,9 +238,12 @@ else:
     filtered_jobs = []
     for job_id, job in sorted_jobs:
         applied = job.get("applied", False)
-        if show_filter == "Not Applied" and applied:
+        ignored = job.get("ignored", False)
+        if show_filter == "Not Applied" and (applied or ignored):
             continue
         elif show_filter == "Applied" and not applied:
+            continue
+        elif show_filter == "Ignored" and not ignored:
             continue
         filtered_jobs.append((job_id, job))
 
@@ -252,6 +258,7 @@ else:
         url = job.get("url", "")
         scraped_at = job.get("scraped_at", "")
         applied = job.get("applied", False)
+        ignored = job.get("ignored", False)
 
         # Format date
         if scraped_at:
@@ -264,20 +271,35 @@ else:
             date_str = "Unknown"
 
         with st.container():
-            col1, col2 = st.columns([0.05, 0.95])
+            col1, col2, col3 = st.columns([0.05, 0.05, 0.90])
 
             with col1:
                 new_applied = st.checkbox(
-                    "Applied",
+                    "✓",
                     value=applied,
                     key=f"applied_{job_id}",
-                    label_visibility="collapsed"
+                    help="Mark as applied"
                 )
                 if new_applied != applied:
                     jobs[job_id]["applied"] = new_applied
+                    if new_applied:
+                        jobs[job_id]["ignored"] = False  # Unignore if applied
                     changes_made = True
 
             with col2:
+                new_ignored = st.checkbox(
+                    "✗",
+                    value=ignored,
+                    key=f"ignored_{job_id}",
+                    help="Ignore this job"
+                )
+                if new_ignored != ignored:
+                    jobs[job_id]["ignored"] = new_ignored
+                    if new_ignored:
+                        jobs[job_id]["applied"] = False  # Unapply if ignored
+                    changes_made = True
+
+            with col3:
                 st.markdown(f"**[{title}]({url})** at **{company}**")
                 st.caption(f"📍 {location} | 🕐 {date_str}")
 
