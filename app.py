@@ -322,13 +322,20 @@ else:
                         changes_made = True
 
             with col2:
-                status = ""
-                if applied:
-                    status = " ✅"
-                elif ignored:
-                    status = " ❌"
-                st.markdown(f"**[{title}]({url})** at **{company}**{status}")
-                st.caption(f"📍 {location} | 🕐 {date_str}")
+                # Job info row
+                info_col, btn_col = st.columns([0.85, 0.15])
+                with info_col:
+                    status = ""
+                    if applied:
+                        status = " ✅"
+                    elif ignored:
+                        status = " ❌"
+                    st.markdown(f"**[{title}]({url})** at **{company}**{status}")
+                    st.caption(f"📍 {location} | 🕐 {date_str}")
+                with btn_col:
+                    if st.button("🤖 Apply", key=f"ai_apply_{job_id}"):
+                        st.session_state["ai_apply_job"] = {"id": job_id, "url": url, "title": title, "company": company}
+                        st.rerun()
 
             st.divider()
 
@@ -336,3 +343,48 @@ else:
     if changes_made:
         save_jobs(jobs)
         st.rerun()
+
+# AI Apply dialog
+if "ai_apply_job" in st.session_state and st.session_state["ai_apply_job"]:
+    job_info = st.session_state["ai_apply_job"]
+
+    st.divider()
+    st.subheader(f"🤖 AI Apply: {job_info['title']} at {job_info['company']}")
+
+    col1, col2, col3 = st.columns(3)
+    st.warning("⚠️ AI will fill the form but will NOT submit. You must review and submit manually.")
+
+    with col1:
+        if st.button("▶️ Start AI Apply", type="primary", use_container_width=True):
+            st.info("🖥️ A browser window will open. Review all fields before clicking Submit.")
+            with st.spinner("Opening browser and filling application... Check your browser!"):
+                try:
+                    from ai_apply import apply_to_job
+                    result = apply_to_job(job_info["url"], headless=False)
+
+                    if result["success"]:
+                        st.success("✅ " + result["message"])
+                        st.write("**Steps completed:**")
+                        for step in result["steps_completed"]:
+                            st.write(f"  ✓ {step}")
+                        if result.get("screenshot"):
+                            st.image(result["screenshot"], caption="Application Preview (before your review)")
+                    else:
+                        st.warning(result["message"])
+                        if result["steps_completed"]:
+                            st.write("**Progress:**")
+                            for step in result["steps_completed"]:
+                                st.write(f"  ✓ {step}")
+                        if result["errors"]:
+                            st.error(f"Errors: {result['errors']}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with col2:
+        if st.button("🔗 Open Job Page", use_container_width=True):
+            st.markdown(f"[Open in new tab]({job_info['url']})")
+
+    with col3:
+        if st.button("❌ Cancel", use_container_width=True):
+            del st.session_state["ai_apply_job"]
+            st.rerun()
