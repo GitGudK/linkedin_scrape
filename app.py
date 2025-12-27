@@ -13,6 +13,7 @@ SEEN_JOBS_FILE = DATA_DIR / "seen_jobs.json"
 FILTERS_FILE = DATA_DIR / "filters.json"
 PYTHON_PATH = Path.home() / ".pyenv/versions/3.11.5/envs/li/bin/python"
 SCRAPER_PATH = DATA_DIR / "scraper.py"
+INDEED_SCRAPER_PATH = DATA_DIR / "indeed_scraper.py"
 
 DEFAULT_FILTERS = {
     "location_keywords": ["remote", "work from home", "wfh", "anywhere", "atlanta", "atl", ", ga", "georgia"],
@@ -58,9 +59,20 @@ def save_filters(filters: dict):
 
 
 def run_scraper():
-    """Run the scraper script and return output."""
+    """Run the LinkedIn scraper script and return output."""
     result = subprocess.run(
         [str(PYTHON_PATH), str(SCRAPER_PATH)],
+        capture_output=True,
+        text=True,
+        timeout=300
+    )
+    return result.stdout + result.stderr
+
+
+def run_indeed_scraper():
+    """Run the Indeed scraper script and return output."""
+    result = subprocess.run(
+        [str(PYTHON_PATH), str(INDEED_SCRAPER_PATH)],
         capture_output=True,
         text=True,
         timeout=300
@@ -82,18 +94,32 @@ filters = load_filters()
 
 # Sidebar
 with st.sidebar:
-    st.header("🔄 Run Scraper")
+    st.header("🔄 Run Scrapers")
 
-    if st.button("🚀 Run Scraper Now", type="primary", use_container_width=True):
-        with st.spinner("Running scraper..."):
-            try:
-                output = run_scraper()
-                st.success("Scraper completed!")
-                st.session_state["scraper_output"] = output
-            except subprocess.TimeoutExpired:
-                st.error("Scraper timed out after 5 minutes.")
-            except Exception as e:
-                st.error(f"Error: {e}")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔗 LinkedIn", type="primary", use_container_width=True):
+            with st.spinner("Scraping LinkedIn..."):
+                try:
+                    output = run_scraper()
+                    st.success("LinkedIn done!")
+                    st.session_state["scraper_output"] = output
+                except subprocess.TimeoutExpired:
+                    st.error("Timed out after 5 min.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with col2:
+        if st.button("🔍 Indeed", type="secondary", use_container_width=True):
+            with st.spinner("Scraping Indeed..."):
+                try:
+                    output = run_indeed_scraper()
+                    st.success("Indeed done!")
+                    st.session_state["indeed_output"] = output
+                except subprocess.TimeoutExpired:
+                    st.error("Timed out after 5 min.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
     # Show last run info
     if SEEN_JOBS_FILE.exists():
@@ -330,8 +356,10 @@ else:
                         status = " ✅"
                     elif ignored:
                         status = " ❌"
+                    source = job.get("source", "linkedin")
+                    source_icon = "🔗" if source == "linkedin" else "🔍"
                     st.markdown(f"**[{title}]({url})** at **{company}**{status}")
-                    st.caption(f"📍 {location} | 🕐 {date_str}")
+                    st.caption(f"{source_icon} {source.title()} | 📍 {location} | 🕐 {date_str}")
                 with btn_col:
                     if st.button("🤖 Apply", key=f"ai_apply_{job_id}"):
                         st.session_state["ai_apply_job"] = {"id": job_id, "url": url, "title": title, "company": company}
